@@ -578,10 +578,27 @@ fun main(args: Array<String>) {
  
 #### 8.2.4 함수를 인라인으로 선언해야 하는 경우
 
+- 람다를 인자로 받는 함수의 경우 인라이닝하면 이익이 많다.
+  - 일반 함수는 JVM에서 가장 이익이 되는 방법으로 호출하기 때문에 꼭 성능 확인 후 적용이 필요!
+- 함수 호출 비용이 줄고 람다 표현 클래스, 람다 인스턴스 객체를 생성할 필요가 없다.
+- 인라이닝을 사용하면 일반 람다에서 사용할 수 없는 기능 사용이 가능하다.
+   - 넌로컬(non-local) 반환 => 뒤에서 설명
+- 주의: 인라이닝되는 본문의 양이 많은 경우, 바이트코드가 커질 수 있음 => 람다 인자와 무관한 부분을 비인라인 함수로 추출
+
 
 #### 8.2.5 자원 관리를 위해 인라인된 람다 사용
 
 
+- 자원: 파일, 락, 데이터베이스 트랜잭션 등...
+- 자원 관리 패턴을 만들 때 try/finally 문을 사용해 try 직전 자원을 획득하고 finally에서 자원을 해제하는 형태
+- 자바의 synchronized는 락 객체를 인자로 취하는데, 코틀린에는 Lock 인터페이스의 확장 함수인 withLock이 있다.
+
+```kotlin
+val l: Lock =
+l.withLock {   // 락을 잠근 다음 주어진 동작 수행
+   // 락에 의해 보호되는 자원을 사용
+}
+```
 * 자바 try-with-resource(자바7 부터)
 ```java
 static String readFirstLineFromFile(String path) throw IOException {
@@ -593,6 +610,14 @@ static String readFirstLineFromFile(String path) throw IOException {
 
 ```
 
+- 코틀린 표준 라이브러리에는 자바 try-with-resource 와 동일한 기능을 하는 use 함수가 있다.
+
+**use 함수**
+- 닫을 수 있는 자원에 대한 확장 함수
+- 람다 호출 후에 자원을 닫음, 예외 발생 시에도 닫음!
+- 인라인 함수
+
+
 * use 함수를 자원 관리에 활용
 ```kotlin
 import java.io.BufferedReader
@@ -600,8 +625,8 @@ import java.io.FileReader
 import java.io.File
 
 fun readFirstLineFromFile(path: String): String {
-    BufferedReader(FileReader(path)).use { br ->
-        return br.readLine()
+    BufferedReader(FileReader(path)).use { br ->   // BufferedReader 객체를 만들고 use 함수 호출, 파일에 대한 연산을 실행할 람다를 전달
+        return br.readLine()   // 자원(여기서는 파일)에서 맨처음 가져온 한 줄을 람다가 아닌 readFirstLineFromFile 에서 반환 => 넌로컬 반환
     }
 }
 
@@ -610,7 +635,13 @@ fun readFirstLineFromFile(path: String): String {
 
 ### 8.3 고차 함수 안에서 흐름 제어
 
+- 루프와 같은 명령형 코드를 람다로 변환하면서 생기는 return 문제를 해결하는 방법은?
+
 #### 8.3.1 람다 안의 return문: 람다를 둘러싼 함수로부터 반환
+
+
+-
+
 ```kotlin
 data class Person(val name: String, val age: Int)
 
@@ -623,14 +654,22 @@ fun lookForAlice(people: List<Person>) {
             return
         }
     }
-    println("Alice is not found")
+    println("Alice is not found")  // people에 Alice가 없으면 출력
 }
 
 fun main(args: Array<String>) {
     lookForAlice(people)
 }
 ```
+- 위 예제를 forEach로 구현해서 사용할 수도 있다.
 
+**람다안에서의 return**
+- 람다안에서 리턴을 사용하면 람다로부터만 반환되는 게 아니라 그 람다를 호출하는 함수가 실행을 끝내고 반환된다.
+- 자신을 둘러싼 블록보다 더 바깥 블록을 반환하게 만드는 return문을 **넌로컬 리턴**이라고 한다.
+- 넌로컬 리턴은 람다를 인자로 받는 함수가 인라인 함수일 경우만 가능하다.
+
+
+ 
 * forEach 사용
 ```kotlin
 data class Person(val name: String, val age: Int)
@@ -656,14 +695,19 @@ fun main(args: Array<String>) {
 
 #### 8.3.2 람다로부터 반환: 레이블을 사용한 return
 
+- 람다에서도 로컬 리턴이 가능
+- 로컬 리턴은 for에서의 break와 동일한 기능
+- 리턴을 구분하기 위해 @:레이블을 사용한다.
+- 리턴으로 실행을 끝내고 싶은 함수앞에 레이블을 붙이고, 리턴 키워드 뒤에 레이블을 추가하면 된다.
+
 * 레이블로 로컬 리턴 사용
 ```kotlin
 
 fun lookForAlice(people: List<Person>) {
-    people.forEach label@{
+    people.forEach label@{  // 람다 앞에 레이블
         if (it.name == "Alice") return@label
     }
-    println("Alice might be somewhere")
+    println("Alice might be somewhere")  // 항상 출력
 }
 
 
